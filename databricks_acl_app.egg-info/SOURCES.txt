@@ -1,0 +1,9 @@
+LICENSE
+README.md
+setup.cfg
+setup.py
+databricks_acl_app.egg-info/PKG-INFO
+databricks_acl_app.egg-info/SOURCES.txt
+databricks_acl_app.egg-info/dependency_links.txt
+databricks_acl_app.egg-info/requires.txt
+databricks_acl_app.egg-info/top_level.txt

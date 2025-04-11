@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: databricks-acl-app
+Version: 0.0.1
+Summary: A Databricks ACL provisioning and schema tagging tool based on YAML configurations.
+Home-page: https://github.com/Nivethan2893/databricks-uc.git
+Author: Nivethan Venkatachalam
+Author-email: nivethanvenkat28@gmail.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+License-File: LICENSE
+Requires-Dist: PyYAML
+Requires-Dist: pyspark
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
