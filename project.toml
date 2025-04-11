@@ -1,0 +1,302 @@
+[project]
+name = "diggi-databricks-uc"
+dynamic = ["version", "readme"]
+description = 'Databricks Unity Catalog Governance framework using Fine and Coarse grained access control'
+license-files = { paths = ["LICENSE", "NOTICE"] }
+requires-python = ">=3.10"
+keywords = ["Databricks"]
+maintainers = [
+    { name = "Nivethan Venkatachalam", email = "nivethanvenkat28@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 1 - Beta",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Environment :: Console",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+
+dependencies = ["databricks-labs-blueprint>=0.9.1,<0.10",
+                "databricks-sdk~=0.30",
+                "databricks-labs-lsql>=0.5,<0.15",
+]
+
+[project.optional-dependencies]
+cli = ["pyspark~=3.5.0"]
+
+[project.entry-points.databricks]
+
+runtime = "databricksAcl.runtime:main"
+[build-system]
+requires = ["hatchling", "hatch-fancy-pypi-readme"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+include = ["src"]
+
+[tool.hatch.version]
+path = "src/databricks/labs/dqx/__about__.py"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "black~=24.3.0",
+    "chispa~=0.10.1",
+    "coverage[toml]~=7.4.4",
+    "databricks-labs-pylint~=0.5",
+    "databricks-labs-pytester~=0.6.0",
+    "mypy~=1.9.0",
+    "pylint~=3.3.1",
+    "pylint-pytest==2.0.0a0",
+    "pytest~=8.3.3",
+    "pytest-cov~=4.1.0",
+    "pytest-mock~=3.14.0",
+    "pytest-timeout~=2.3.1",
+    "pytest-xdist~=3.5.0",
+    "ruff~=0.3.4",
+    "types-PyYAML~=6.0.12",
+    "types-requests~=2.31.0",
+    "databricks-connect~=15.4",
+    "pyspark~=3.5.0",
+    "databricks-labs-blueprint>=0.9.1,<0.10",
+    "databricks-sdk~=0.30",
+    "databricks-labs-lsql>=0.5,<0.15"
+]
+
+python="3.10"
+
+# store virtual env as the child of this folder. Helps VSCode (and PyCharm) to run better
+path = ".venv"
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+exclude = ['venv', '.venv', 'demos/*']
+
+[tool.pytest.ini_options]
+addopts = "--no-header"
+cache_dir = ".venv/pytest-cache"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.black]
+target-version = ["py310"]
+line-length = 120
+skip-string-normalization = true
+extend-exclude = 'demos/'
+
+[tool.ruff]
+cache-dir = ".venv/ruff-cache"
+target-version = "py310"
+line-length = 120
+exclude = ["demos/*"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["databricks.labs.dqx"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+omit = ["*/working-copy/*", 'src/databricks/labs/dqx/__main__.py']
+exclude_lines = [
+    "no cov",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.pylint.main]
+# PyLint configuration is adapted from Google Python Style Guide with modifications.
+# Sources https://google.github.io/styleguide/pylintrc
+# License: https://github.com/google/styleguide/blob/gh-pages/LICENSE
+
+# Clear in-memory caches upon conclusion of linting. Useful if running pylint in
+# a server-like mode.
+# clear-cache-post-run =
+
+# Always return a 0 (non-error) status code, even if lint errors are found. This
+# is primarily useful in continuous integration scripts.
+# exit-zero =
+
+# A comma-separated list of package or module names from where C extensions may
+# be loaded. Extensions are loading into the active Python interpreter and may
+# run arbitrary code.
+# extension-pkg-allow-list =
+
+# A comma-separated list of package or module names from where C extensions may
+# be loaded. Extensions are loading into the active Python interpreter and may
+# run arbitrary code. (This is an alternative name to extension-pkg-allow-list
+# for backward compatibility.)
+# extension-pkg-whitelist =
+
+# Specify a score threshold under which the program will exit with error.
+fail-under = 10.0
+
+# Interpret the stdin as a python script, whose filename needs to be passed as
+# the module_or_package argument.
+# from-stdin =
+
+# Add files or directories matching the regular expressions patterns to the
+# ignore-list. The regex matches against paths and can be in Posix or Windows
+# format. Because '\\' represents the directory delimiter on Windows systems, it
+# can't be used as an escape character.
+# ignore-paths =
+
+# Files or directories matching the regular expression patterns are skipped. The
+# regex matches against base names, not paths. The default value ignores Emacs
+# file locks
+ignore-patterns = ["^\\.#"]
+
+# List of module names for which member attributes should not be checked (useful
+# for modules/projects where namespaces are manipulated during runtime and thus
+# existing member attributes cannot be deduced by static analysis). It supports
+# qualified module names, as well as Unix pattern matching.
+# ignored-modules =
+
+# Python code to execute, usually for sys.path manipulation such as
+# pygtk.require().
+#init-hook=''
+
+# Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
+# number of processors available to use, and will cap the count on Windows to
+# avoid hangs.
+jobs = 0
+
+# Control the amount of potential inferred values when inferring a single object.
+# This can help the performance when dealing with large functions or complex,
+# nested conditions.
+limit-inference-results = 100
+
+# List of plugins (as comma separated values of python module names) to load,
+# usually to register additional checkers.
+load-plugins = [
+    "databricks.labs.pylint.all",
+    "pylint_pytest",
+    "pylint.extensions.bad_builtin",
+    "pylint.extensions.broad_try_clause",
+    "pylint.extensions.check_elif",
+    "pylint.extensions.code_style",
+    "pylint.extensions.confusing_elif",
+    "pylint.extensions.comparison_placement",
+    "pylint.extensions.consider_refactoring_into_while_condition",
+    "pylint.extensions.dict_init_mutate",
+    "pylint.extensions.docparams",
+    "pylint.extensions.dunder",
+    "pylint.extensions.for_any_all",
+    "pylint.extensions.mccabe",
+    "pylint.extensions.overlapping_exceptions",
+    "pylint.extensions.private_import",
+    "pylint.extensions.redefined_variable_type",
+    "pylint.extensions.set_membership",
+    "pylint.extensions.typing",
+]
+
+# Pickle collected data for later comparisons.
+persistent = true
+
+# Minimum Python version to use for version dependent checks. Will default to the
+# version used to run pylint.
+py-version = "3.10"
+
+# Discover python modules and packages in the file system subtree.
+# recursive =
+
+# Add paths to the list of the source roots. Supports globbing patterns. The
+# source root is an absolute path or a path relative to the current working
+# directory used to determine a package namespace for modules located under the
+# source root.
+# source-roots =
+
+# When enabled, pylint would attempt to guess common misconfiguration and emit
+# user-friendly hints instead of false-positive error messages.
+suggestion-mode = true
+
+# Allow loading of arbitrary C extensions. Extensions are imported into the
+# active Python interpreter and may run arbitrary code.
+# unsafe-load-any-extension =
+
+[tool.pylint.basic]
+# Naming style matching correct argument names.
+argument-naming-style = "snake_case"
+
+# Regular expression matching correct argument names. Overrides argument-naming-
+# style. If left empty, argument names will be checked with the set naming style.
+argument-rgx = "[a-z_][a-z0-9_]{2,40}$"
+
+# Naming style matching correct attribute names.
+attr-naming-style = "snake_case"
+
+# Regular expression matching correct attribute names. Overrides attr-naming-
+# style. If left empty, attribute names will be checked with the set naming
+# style.
+attr-rgx = "[a-z_][a-z0-9_]{1,}$"
+
+# Bad variable names which should always be refused, separated by a comma.
+bad-names = ["foo", "bar", "baz", "toto", "tutu", "tata"]
+
+# Bad variable names regexes, separated by a comma. If names match any regex,
+# they will always be refused
+# bad-names-rgxs =
+
+# Naming style matching correct class attribute names.
+class-attribute-naming-style = "any"
+
+# Regular expression matching correct class attribute names. Overrides class-
+# attribute-naming-style. If left empty, class attribute names will be checked
+# with the set naming style.
+class-attribute-rgx = "([A-Za-z_][A-Za-z0-9_]{1,30}|(__.*__))$"
+
+# Naming style matching correct class constant names.
+class-const-naming-style = "UPPER_CASE"
+
+# Regular expression matching correct class constant names. Overrides class-
+# const-naming-style. If left empty, class constant names will be checked with
+# the set naming style.
+# class-const-rgx =
+
+# Naming style matching correct class names.
+class-naming-style = "PascalCase"
+
+# Regular expression matching correct class names. Overrides class-naming-style.
+# If left empty, class names will be checked with the set naming style.
+class-rgx = "[A-Z_][a-zA-Z0-9]+$"
+
+# Naming style matching correct constant names.
+const-naming-style = "UPPER_CASE"
+
+# Regular expression matching correct constant names. Overrides const-naming-
+# style. If left empty, constant names will be checked with the set naming style.
+const-rgx = "(([A-Z_][A-Z0-9_]*)|(__.*__))$"
+
+# Minimum line length for functions/classes that require docstrings, shorter ones
+# are exempt.
+docstring-min-length = -1
+
+# Naming style matching correct function names.
+function-naming-style = "snake_case"
+
+# Regular expression matching correct function names. Overrides function-naming-
+# style. If left empty, function names will be checked with the set naming style.
+function-rgx = "[a-z_][a-z0-9_]{2,}$"
+
+# Good variable names which should always be accepted, separated by a comma.
+good-names = [
+    "f",            # use for file handles
+    "i", "j", "k",  # use for loops
+    "df",           # use for pyspark.sql.DataFrame
+    "ex", "e",      # use for exceptions
+    "fn", "cb",     # use for callbacks
+    "_",            # use for ignores
+    "a",            # use for databricks.sdk.AccountClient
+    "w", "ws",      # use for databricks.sdk.WorkspaceClient
+    "me"            # use for current user
+]
