@@ -1,45 +1,23 @@
-from databricksAcl.logging import setup_logging
-import yaml
+from databricksAcl.config_helper import ConfigHelper
+from pyspark.sql import SparkSession
 
 class ACLProvisioner:
     """
     Generates ACL GRANT/REVOKE statements based on workspace environment and permissions YAML config.
     """
 
-    def __init__(self, yaml_config_path):
-        self.logger, _ = setup_logging(self.__class__.__name__)
+    def __init__(self, spark: SparkSession, yaml_config_path, column_mask_path=None):
+        self.spark = spark
+        self.logger, _ = ConfigHelper.setup_logging(self.__class__.__name__)
         self.yaml_config_path = yaml_config_path
-        self.config = self.load_yaml_config()
-        self.env = self.get_environment()
+        self.config = ConfigHelper.load_yaml_config(self.yaml_config_path, self.logger)
+        self.env = ConfigHelper.get_environment(self.config, self.logger)
         self.perm_config = self.config["permission_mapping"]
-        self.schema_map = self.config["schema_mapping"]
+        self.catalog_map = self.config["catalog_mapping"]
 
-    def load_yaml_config(self):
-        """Loads and parses the YAML config file."""
-        try:
-            with open(self.yaml_config_path, 'r') as yaml_file:
-                return yaml.safe_load(yaml_file)
-        except Exception as e:
-            self.logger.error(f"Failed to load YAML config: {e}")
-            raise
-
-    def get_environment(self):
-        """Resolves current environment from workspace ID."""
-        try:
-            ws_id = spark.conf.get("spark.databricks.workspaceUrl").split("adb-")[1].split(".")[0]
-            env_map = {
-                "2820692244148839": "dev",
-                "2628671957839451": "acc",
-                "573860658642293": "prd"
-            }
-            env = env_map.get(ws_id)
-            if not env:
-                raise ValueError(f"Workspace ID {ws_id} not found in env_map.")
-            self.logger.info(f"Resolved environment '{env}' from workspace ID {ws_id}")
-            return env
-        except Exception as e:
-            self.logger.error(f"Failed to determine environment: {e}")
-            raise
+        # Optional column masking config
+        self.column_mask_path = column_mask_path
+        self.column_mask_config = (ConfigHelper.load_yaml_config(column_mask_path, self.logger) if column_mask_path else {})
 
     def get_permissions(self, permission_group, object_type):
         """
@@ -82,7 +60,7 @@ class ACLProvisioner:
 
         table_list = []
         try:
-            df = spark.sql(query)
+            df = self.spark.sql(query)
             for row in df.collect():
                 table_list.append(f"{row['catalog_name']}.{row['schema_name']}")
         except Exception as e:
@@ -101,7 +79,7 @@ class ACLProvisioner:
             list[str]
         """
         table_list = []
-        env_map = self.schema_map.get(self.env, {})
+        env_map = self.catalog_map.get(self.env, {})
 
         for ref in schema_names:
             try:
@@ -133,7 +111,7 @@ class ACLProvisioner:
             list[str]
         """
         table_list = []
-        env_map = self.schema_map.get(self.env, {})
+        env_map = self.catalog_map.get(self.env, {})
 
         for ref in table_names:
             try:
@@ -154,49 +132,36 @@ class ACLProvisioner:
 
         return table_list
 
-    def generate_statements(self, table_list, permission_types, object_type, grant_type, user_groups):
+    def generate_acl_statements(self, table_name, bu):
         """
-        Creates GRANT or REVOKE SQL statements.
+        Parses access control entries from a Delta table and returns SQL ACL statements.
+
+        Automatically:
+        - Updates expired access to 'REVOKE' based on 'access_until'
+        - Updates 'updated_datetime' during each ACL processing cycle
 
         Args:
-            table_list (list[str])
-            permission_types (list[str])
-            object_type (str)
-            grant_type (str): 'GRANT' or 'REVOKE'
-            user_groups (list[str])
+            table_name (str): Fully qualified Delta table name (e.g., catalog.schema.table)
 
         Returns:
-            list[tuple[str]]
+            DataFrame: Spark DataFrame with a single column 'access_statement'
         """
-        target_keyword = "TO" if grant_type == "GRANT" else "FROM"
-        statements = []
+        # Step 1: Update expired access control entries
+        updated_df = ConfigHelper.update_expired_access_and_timestamp(table_name, bu, self.logger)
 
-        for table in set(table_list):
-            for group in user_groups:
-                for perm in permission_types:
-                    stmt = f"{grant_type} {perm} ON {object_type} {table} {target_keyword} `{group}`"
-                    statements.append((stmt,))
-        return statements
-
-    def generate_acl_statements(self, csv_path):
-        """
-        Parses access CSV and returns all SQL ACL statements.
-
-        Args:
-            csv_path (str): CSV with user_group, schema/table info, and permissions
-
-        Returns:
-            DataFrame: Single-column Spark DataFrame of SQL statements
-        """
-        df = spark.read.option("header", True).option("delimiter", ";").csv(csv_path)
+        # Step 2: Generate ACL SQL statements from updated rows
         access_statements = []
 
-        for row in df.collect():
+        for row in updated_df.collect():
             grant_type = row["grant_type"].strip()
             object_type = row["object_type"].strip()
             permission_group = row["permission_types"].strip()
             user_groups = [ug.strip() for ug in row["user_group"].split(",") if ug.strip()]
 
+            tag_values_raw = row["tag_values"]
+            tag_values = [tag.strip() for tag in tag_values_raw.split(",")] if tag_values_raw else []
+
+            # Fetch permission list for this group + object type + env
             permission_types = self.get_permissions(permission_group, object_type)
             if not permission_types:
                 self.logger.warning(
@@ -206,8 +171,7 @@ class ACLProvisioner:
 
             table_list = []
 
-            if row["tag_values"]:
-                tag_values = [tag.strip() for tag in row["tag_values"].split(",")]
+            if tag_values:
                 table_list += self.get_tables_from_tags(tag_values)
 
             if row["schema_names"]:
@@ -218,12 +182,17 @@ class ACLProvisioner:
                 table_names = [t.strip() for t in row["table_names"].split(",")]
                 table_list += self.get_tables_from_names(table_names)
 
-            access_statements += self.generate_statements(
-                table_list, permission_types, object_type, grant_type, user_groups
-            )
+            # Attach tag_values for downstream processing (e.g., update_datetime)
+            joined_tag_values = ",".join(tag_values) if tag_values else None
 
-        self.logger.info(f"Generated {len(access_statements)} access statements.")
-        return spark.createDataFrame(access_statements, ["access_statement"])
+            for table in table_list:
+                for group in user_groups:
+                    for perm in permission_types:
+                        stmt = f"{grant_type} {perm} ON {object_type} {table} {'TO' if grant_type == 'GRANT' else 'FROM'} `{group}`"
+                        access_statements.append((stmt, joined_tag_values))
+
+        self.logger.info(f"✅ Generated {len(access_statements)} access statements.")
+        return self.spark.createDataFrame(access_statements, ["access_statement", "tag_values"])
     
     
     def apply_column_masking_from_yaml(self):
@@ -232,8 +201,11 @@ class ACLProvisioner:
         Applies or drops column-level masks based on YAML configuration under 'column_masks'.
         Supports dynamic schema resolution and multiple user groups.
         """
-        column_masks = self.config.get("column_masks", [])
-        env_schema_map = self.schema_map.get(self.env, {})
+        column_masks = self.column_mask_config.get("column_masks", [])
+        if not column_masks:
+            self.logger.info("No column masking rules to apply.")
+            return
+        env_schema_map = self.catalog_map.get(self.env, {})
 
         for entry in column_masks:
             try:
@@ -266,14 +238,14 @@ class ACLProvisioner:
 
                 if drop_existing:
                     drop_mask_sql = f"ALTER TABLE {full_table_name} ALTER COLUMN {column} DROP MASK"
-                    spark.sql(drop_mask_sql)
+                    self.spark.sql(drop_mask_sql)
                     self.logger.info(f"🧹 Dropped masking from {full_table_name}.{column}")
                     continue
 
                 # Check if function already exists
-                spark.sql(f"USE CATALOG {catalog}")
+                self.spark.sql(f"USE CATALOG {catalog}")
                 func_check_sql = f"SHOW FUNCTIONS IN {schema}"
-                existing_funcs = [row['function'] for row in spark.sql(func_check_sql).collect() if row['function'] == f'{catalog}.{schema}.{func_name}'.lower()]
+                existing_funcs = [row['function'] for row in self.spark.sql(func_check_sql).collect() if row['function'] == f'{catalog}.{schema}.{func_name}'.lower()]
                 if func_name.lower() in existing_funcs[0].split(".")[2]:
                     self.logger.info(f"⏭️ Skipped: Function '{func_name}' already exists.")
                     continue
@@ -285,7 +257,7 @@ class ACLProvisioner:
                             ELSE '{mask_value}'
                         END
                     """
-                    spark.sql(create_func_sql)
+                    self.spark.sql(create_func_sql)
                     self.logger.info(f"✅ Created masking function: {func_name}")
 
                     apply_mask_sql = f"""
@@ -293,7 +265,7 @@ class ACLProvisioner:
                         ALTER COLUMN {column}
                         SET MASK {catalog}.{schema}.{func_name}
                     """
-                    spark.sql(apply_mask_sql)
+                    self.spark.sql(apply_mask_sql)
                     self.logger.info(f"✅ Applied masking to {full_table_name}.{column} using: {func_name}")
 
             except Exception as e:

@@ -5,11 +5,11 @@ from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from delta.tables import DeltaTable
 from pyspark.sql.functions import *
-import re
+from pyspark.sql import SparkSession
 
 class ConfigHelper:
     @staticmethod
-    def load_yaml_config(yaml_path, logger=None):
+    def load_yaml_config(yaml_path: str, logger=None):
         try:
             with open(yaml_path, "r") as f:
                 return yaml.safe_load(f)
@@ -19,7 +19,7 @@ class ConfigHelper:
             raise
 
     @staticmethod
-    def get_environment(config, logger=None):
+    def get_environment(spark: SparkSession, config, logger=None):
         try:
             ws_id = spark.conf.get("spark.databricks.workspaceUrl").split("adb-")[1].split(".")[0]
             env_map = config.get("env_map", {})
@@ -80,7 +80,7 @@ class ConfigHelper:
         return logger, None
 
     @staticmethod
-    def update_expired_access_and_timestamp(table_name: str, bu: str, logger=None):
+    def update_expired_access_and_timestamp(spark: SparkSession, table_name: str, bu: str, logger=None):
         """
         Updates the Delta table rows where `access_until` has expired by:
         - Changing `grant_type` to 'REVOKE' if expired
@@ -136,7 +136,7 @@ class ConfigHelper:
             raise
     
     @staticmethod
-    def append_unique_acl_rows_from_mapping_file(acl_mapping_path, bu, target_table, target_table_path, logger=None):
+    def append_unique_acl_rows_from_mapping_file(spark: SparkSession, acl_mapping_path, bu, target_table, target_table_path, logger=None):
         """
         Loads ACL records from a CSV and appends only new rows to the target Delta table,
         based on all column values (exact match).
