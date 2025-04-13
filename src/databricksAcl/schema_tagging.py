@@ -1,4 +1,5 @@
-from databricksAcl.logging import setup_logging
+from databricksAcl.config_helper import ConfigHelper
+from pyspark.sql import SparkSession
 import yaml
 
 class SchemaTagManager:
@@ -6,11 +7,12 @@ class SchemaTagManager:
     Manages schema and table tags dynamically based on Databricks workspace environment.
     """
 
-    def __init__(self, yaml_path):
-        self.logger, _ = setup_logging(self.__class__.__name__)
+    def __init__(self, spark: SparkSession, yaml_path: str):
+        self.spark = spark
+        self.logger, _ = ConfigHelper.setup_logging(self.__class__.__name__)
         self.yaml_path = yaml_path
         self.config = self.load_config()
-        self.env = self.get_environment()
+        self.env = ConfigHelper.get_environment(self.config, self.logger)
 
     def load_config(self):
         """Loads YAML configuration from the specified path."""
@@ -19,19 +21,6 @@ class SchemaTagManager:
                 return yaml.safe_load(file)
         except Exception as e:
             raise RuntimeError(f"Failed to load YAML file: {e}")
-
-    def get_environment(self):
-        """Determines the environment name based on workspace ID from YAML config."""
-        try:
-            ws_id = spark.conf.get("spark.databricks.workspaceUrl").split("adb-")[1].split(".")[0]
-            env_map = self.config.get("env_map", {})
-            env = env_map.get(ws_id)
-            if not env:
-                raise ValueError(f"Workspace ID {ws_id} not found in env_map.")
-            self.logger.info(f"Resolved environment '{env}' for workspace ID {ws_id}")
-            return env
-        except Exception as e:
-            raise RuntimeError(f"Failed to determine environment: {e}")
 
     def _generate_set_tags_sql(self, tags: dict, target_type: str, target: str):
         tag_properties = ", ".join([f"'{k}' = '{v}'" for k, v in tags.items()])
@@ -65,7 +54,7 @@ class SchemaTagManager:
                         self.logger.warning(f"Unsupported action '{action}' for schema tagging.")
                         continue
 
-                    spark.sql(sql_cmd)
+                    self.spark.sql(sql_cmd)
                     self.logger.info(f"{action} tags {tags} on schema {schema}")
 
                 except Exception as e:
@@ -99,7 +88,7 @@ class SchemaTagManager:
                             self.logger.warning(f"Unsupported action '{action}' for table tagging.")
                             continue
 
-                        spark.sql(sql_cmd)
+                        self.spark.sql(sql_cmd)
                         self.logger.info(f"{action} tags {tags} on table {full_table_name}")
 
                     except Exception as e:
